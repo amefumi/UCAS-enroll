@@ -19,8 +19,11 @@ Create a file named `courseid` and fill in your willing course's ID. Example:
 114M514-1
 1919M810H
 ```
+## Dependency (TBD)
 
-## Usage
+You should solve the dependency issues by yourselves. Please make PR to help fix it.
+
+## Usage (TBD)
 
 Please make PR to help fill the usage.
 
