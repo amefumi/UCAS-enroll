@@ -18,14 +18,63 @@ from prettytable import PrettyTable
 from config import Config
 import captcha as cpt
 from utils import score_to_gpa
-from urls import Login, Course, CollegeCode
+
+CollegeCode = {
+    '0701': '数学',
+    '0702': '物理',
+    '0704': '天文',
+    '0703': '化学',
+    '0802': '材料',
+    '0710': '生命',
+    '0706': '地球',
+    '0705': '资环',
+    '0812': '计算',
+    '0808': '电子',
+    '0801': '工程',
+    '1256': '工程',
+    '1205': '经管',
+    '0201': '经管',
+    '0202': '公管',
+    '0301': '公管',
+    '1204': '公管',
+    '0503': '人文',
+    '0502': '外语',
+    '16': '中丹',
+    '17': '国际',
+    '1001': '存济',
+    '0854': '微电',
+    '0839': '网络',
+    '2001': '未来',
+    '22': '',
+    '0101': '马克',
+    '0305': '马克',
+    '0402': '心理',
+    '0811': '人工',
+    '0702': '纳米',
+    '1302': '艺术',
+    '0452': '体育',
+}
+
+
+class Login:
+    page = 'https://sep.ucas.ac.cn'
+    url = page + '/slogin'
+    system = page + '/portal/site/226/821'
+    pic = page + '/changePic'
+
+
+class Course:
+    base = 'https://jwxk.ucas.ac.cn'
+    identify = base + '/login?Identity='
+    selected = base + '/courseManage/selectedCourse'
+    selection = base + '/courseManage/main'
+    category = base + '/courseManage/selectCourse?s='
+    save = base + '/courseManage/saveCourse?s='
+    score = base + '/score/yjs/all.json'
+    captcha = base + '/captchaImage'
 
 
 class BadNetwork(Exception):
-    pass
-
-
-class BrokenNetWork(Exception):
     pass
 
 
@@ -33,8 +82,7 @@ class AuthInvalid(Exception):
     pass
 
 
-class Cli():
-    
+class Cli(object):
     headers = {
         'Connection': 'keep-alive',
         'Pragma': 'no-cache',
@@ -55,42 +103,23 @@ class Cli():
         self.s = requests.Session()
         self.s.headers = self.headers
         self.s.timeout = Config.timeout
-        self.network_retry = Config.network_retry
         self.login(user, password)
-        self.init_course()
+        self.initCourse()
 
     def get(self, url, *args, **kwargs):
-        while(self.network_retry > 0):
-            try:
-                r = self.s.get(url, *args, **kwargs)
-                if r.status_code != requests.codes.ok:
-                    raise BadNetwork
-                self.network_retry = Config.network_retry
-                return r
-            except BadNetwork:
-                if self.network_retry == 0:
-                    raise BrokenNetWork
-                self.network_retry -= 1
-                self.logger.debug('network error, retry {Config.network_retry - self.network_retry + 1}...')
-                time.sleep(1)
+        r = self.s.get(url, *args, **kwargs)
+        if r.status_code != requests.codes.ok:
+            raise BadNetwork
+        return r
 
     def post(self, url, *args, **kwargs):
-        while(self.network_retry > 0):
-            try:
-                r = self.s.post(url, *args, **kwargs)
-                if r.status_code != requests.codes.ok:
-                    raise BadNetwork
-                self.network_retry = Config.network_retry
-                return r
-            except BadNetwork:
-                if self.network_retry == 0:
-                    raise BrokenNetWork
-                self.network_retry -= 1
-                self.logger.debug(f'network error, retry {Config.network_retry - self.network_retry + 1}...')
-                time.sleep(1)
+        r = self.s.post(url, *args, **kwargs)
+        if r.status_code != requests.codes.ok:
+            raise BadNetwork
+        return r
 
     def encode_password(self, password):
-        r = self.get(url=Login.sep_base)
+        r = self.get(url=Login.page)
         pubkey_re = re.compile(r"jsePubKey = '(.*)';")
         pubkey = pubkey_re.findall(r.text)[0]
         pubkey = '-----BEGIN PUBLIC KEY-----\n' + pubkey + '\n-----END PUBLIC KEY-----'
@@ -98,7 +127,7 @@ class Cli():
         cipher_b64 = cipher.encrypt(password.encode())
         return b64encode(cipher_b64).decode()
 
-    def init_course(self):
+    def initCourse(self):
         self.courseid = []
         with open('courseid', 'r', encoding='utf8') as fh:
             for c in fh:
@@ -114,18 +143,18 @@ class Cli():
             else:
                 self.logger.debug('cookie expired...')
                 os.unlink('cookie.dat')
-        self.get(Login.sep_base)
+        self.get(Login.page)
         password_rsa = self.encode_password(password)
         data = {
             'userName': user,
             'pwd': password_rsa,
             'sb': 'sb'
         }
-        login_captcha = self.get(Login.sep_captcha).content
+        login_captcha = self.get(Login.pic).content
         cert_code = cpt.recognize_login(login_captcha)
         self.logger.debug(f'login cert code = {cert_code}')
         data['certCode'] = cert_code
-        self.post(Login.sep_login, data=data)
+        self.post(Login.url, data=data)
         if 'sepuser' not in self.s.cookies.get_dict():
             self.logger.error('login fail...')
             sys.exit()
@@ -134,7 +163,7 @@ class Cli():
         self.auth()
 
     def auth(self):
-        r = self.get(Login.enroll_system)
+        r = self.get(Login.system)
         identity = r.text.split('<meta http-equiv="refresh" content="0;url=')
         if len(identity) < 2:
             self.logger.error('login fail')
@@ -155,7 +184,7 @@ class Cli():
             cookies = pickle.load(f)
             self.s.cookies = cookies
 
-    def enroll_all(self):
+    def enroll(self):
         r = self.get(Course.selection)
         if 'loginSuccess' not in r.text:
             # <label id="loginSuccess" class="success"></label>
@@ -168,7 +197,7 @@ class Cli():
             if cid in r.text:
                 self.logger.info('course %s already selected' % cid)
                 continue
-            error = self.enroll_single(cid, college)
+            error = self.enrollCourse(cid, college)
             if error and error != "Time Unavailable":
                 self.logger.debug(
                     'try enroll course %s fail: %s' % (cid, error))
@@ -177,7 +206,7 @@ class Cli():
                 self.logger.debug("enroll course %s success" % cid)
         return course_id
 
-    def enroll_single(self, cid, college):
+    def enrollCourse(self, cid, college):
         r = self.get(Course.selection)
         depRe = re.compile(r'<label for="id_([0-9]{3})">(.*)<\/label>')
         deptIds = depRe.findall(r.text)
@@ -284,7 +313,7 @@ def main():
                 c.auth()
                 reauth = False
             if func == 'enroll':
-                courseid = c.enroll_all()
+                courseid = c.enroll()
                 if not courseid:
                     break
                 c.courseid = courseid

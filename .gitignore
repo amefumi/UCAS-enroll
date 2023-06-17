@@ -105,7 +105,7 @@ venv.bak/
 
 auth
 courseid
-cookie.dat
+cookie.pkl
 captcha.jpg
 mailconfig
 .vscode/launch.json

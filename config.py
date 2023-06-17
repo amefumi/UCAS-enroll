@@ -9,4 +9,3 @@ class Config:
     maxIdle = 1.7777
     waitForUser = 60
     captchaRepeatTime = 5
-    network_retry = 3
